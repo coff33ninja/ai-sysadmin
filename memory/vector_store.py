@@ -64,7 +64,7 @@ class VectorMemory:
         if not self.collection:
             # Fallback to file-based storage
             self.chroma_status = "file_fallback"
-        
+
         # Always set up file fallback path
         self.memory_file = os.path.join(persist_directory, "memories.jsonl")
 
@@ -83,7 +83,7 @@ class VectorMemory:
                 memory_count = len(memories)
             except Exception:
                 memory_count = "unknown"
-        
+
         return {
             "chroma_available": CHROMA_AVAILABLE,
             "chroma_version": CHROMA_VERSION,
@@ -125,8 +125,10 @@ class VectorMemory:
             try:
                 # Get collection count to avoid requesting more than available
                 collection_count = self.collection.count()
-                actual_limit = min(limit, collection_count) if collection_count > 0 else 1
-                
+                actual_limit = (
+                    min(limit, collection_count) if collection_count > 0 else 1
+                )
+
                 # Semantic search with ChromaDB
                 results = self.collection.query(
                     query_texts=[query], n_results=actual_limit, where=filter_metadata
@@ -151,8 +153,10 @@ class VectorMemory:
         else:
             # Fallback to simple text matching
             return self._fallback_recall(query, limit, filter_metadata)
-    
-    def _fallback_recall(self, query: str, limit: int, filter_metadata: Optional[Dict] = None) -> List[Dict]:
+
+    def _fallback_recall(
+        self, query: str, limit: int, filter_metadata: Optional[Dict] = None
+    ) -> List[Dict]:
         """Fallback text-based search when ChromaDB is not available or fails."""
         memories = self._load_all_memories()
         query_lower = query.lower()
@@ -196,20 +200,24 @@ class VectorMemory:
                 memories = []
                 if all_results and all_results["ids"]:
                     for i in range(len(all_results["ids"])):
-                        memories.append({
-                            "id": all_results["ids"][i],
-                            "text": all_results["documents"][i],
-                            "metadata": all_results["metadatas"][i]
-                        })
+                        memories.append(
+                            {
+                                "id": all_results["ids"][i],
+                                "text": all_results["documents"][i],
+                                "metadata": all_results["metadatas"][i],
+                            }
+                        )
                 # Sort by timestamp descending
-                memories.sort(key=lambda x: x["metadata"].get("timestamp", ""), reverse=True)
+                memories.sort(
+                    key=lambda x: x["metadata"].get("timestamp", ""), reverse=True
+                )
                 return memories[:limit]
             except Exception:
                 # Fallback to file-based if ChromaDB fails
                 return self._get_recent_from_file(limit)
         else:
             return self._get_recent_from_file(limit)
-    
+
     def _get_recent_from_file(self, limit: int) -> List[Dict]:
         """Get recent memories from file storage."""
         memories = self._load_all_memories()

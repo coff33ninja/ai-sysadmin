@@ -1,0 +1,20 @@
+{
+  "plan": "Mock Plan for: run speedtest in ter...",
+  "steps": [
+    {
+      "id": 0,
+      "command": "terminal.run",
+      "args": {
+        "command": "echo 'Executing: run speedtest in terminal'"
+      },
+      "needs_confirmation": false,
+      "description": "Execute: echo 'Executing: run speedtest in terminal'"
+    }
+  ],
+  "suggest_execution": true,
+  "response": "I've created a mock plan for 'run speedtest in terminal'. This is a test response since no API key is configured. Would you like me to execute it?",
+  "safety_notes": [
+    "This is a mock response for testing"
+  ],
+  "id": "-8486142270862264023"
+}
