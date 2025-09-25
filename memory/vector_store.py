@@ -68,12 +68,27 @@ class VectorMemory:
 
     def get_status(self) -> Dict:
         """Get the current status of the vector memory system."""
+        memory_count = 0
+        if self.collection:
+            try:
+                memory_count = self.collection.count()
+            except Exception:
+                memory_count = "unknown"
+        else:
+            # Count from file
+            try:
+                memories = self._load_all_memories()
+                memory_count = len(memories)
+            except Exception:
+                memory_count = "unknown"
+        
         return {
             "chroma_available": CHROMA_AVAILABLE,
             "chroma_version": CHROMA_VERSION,
             "status": self.chroma_status,
             "using_vector_search": self.collection is not None,
             "persist_directory": self.persist_dir,
+            "memory_count": memory_count,
         }
 
     def remember(self, text: str, metadata: Optional[Dict] = None) -> str:
@@ -105,41 +120,69 @@ class VectorMemory:
     ) -> List[Dict]:
         """Retrieve memories similar to the query."""
         if self.collection:
-            # Semantic search with ChromaDB
-            results = self.collection.query(
-                query_texts=[query], n_results=limit, where=filter_metadata
-            )
+            try:
+                # Get collection count to avoid requesting more than available
+                collection_count = self.collection.count()
+                actual_limit = min(limit, collection_count) if collection_count > 0 else 1
+                
+                # Semantic search with ChromaDB
+                results = self.collection.query(
+                    query_texts=[query], n_results=actual_limit, where=filter_metadata
+                )
 
-            memories = []
-            if results and results["ids"] and len(results["ids"]) > 0:
-                for i in range(len(results["ids"][0])):
-                    memories.append(
-                        {
-                            "id": results["ids"][0][i],
-                            "text": results["documents"][0][i],
-                            "distance": results["distances"][0][i],
-                            "metadata": results["metadatas"][0][i],
-                        }
-                    )
-            return memories
+                memories = []
+                if results and results["ids"] and len(results["ids"]) > 0:
+                    for i in range(len(results["ids"][0])):
+                        memories.append(
+                            {
+                                "id": results["ids"][0][i],
+                                "text": results["documents"][0][i],
+                                "distance": results["distances"][0][i],
+                                "metadata": results["metadatas"][0][i],
+                            }
+                        )
+                return memories
+            except Exception as e:
+                # If ChromaDB query fails, fall back to file-based search
+                print(f"ChromaDB query failed, falling back to file search: {e}")
+                return self._fallback_recall(query, limit, filter_metadata)
         else:
             # Fallback to simple text matching
-            memories = self._load_all_memories()
-            query_lower = query.lower()
+            return self._fallback_recall(query, limit, filter_metadata)
+    
+    def _fallback_recall(self, query: str, limit: int, filter_metadata: Optional[Dict] = None) -> List[Dict]:
+        """Fallback text-based search when ChromaDB is not available or fails."""
+        memories = self._load_all_memories()
+        query_lower = query.lower()
 
-            # Simple relevance scoring based on word overlap
-            scored = []
+        # Apply metadata filter if provided
+        if filter_metadata:
+            filtered_memories = []
             for memory in memories:
-                text_lower = memory["text"].lower()
-                words_query = set(query_lower.split())
-                words_text = set(text_lower.split())
-                overlap = len(words_query.intersection(words_text))
-                if overlap > 0:
-                    scored.append((overlap / len(words_query), memory))
+                metadata = memory.get("metadata", {})
+                match = True
+                for key, value in filter_metadata.items():
+                    if metadata.get(key) != value:
+                        match = False
+                        break
+                if match:
+                    filtered_memories.append(memory)
+            memories = filtered_memories
 
-            # Sort by relevance and return top results
-            scored.sort(reverse=True, key=lambda x: x[0])
-            return [item[1] for item in scored[:limit]]
+        # Simple relevance scoring based on word overlap
+        scored = []
+        for memory in memories:
+            text_lower = memory["text"].lower()
+            words_query = set(query_lower.split())
+            words_text = set(text_lower.split())
+            overlap = len(words_query.intersection(words_text))
+            if overlap > 0:
+                score = overlap / len(words_query)
+                scored.append((score, memory))
+
+        # Sort by relevance and return top results
+        scored.sort(reverse=True, key=lambda x: x[0])
+        return [item[1] for item in scored[:limit]]
 
     def get_recent(self, limit: int = 10) -> List[Dict]:
         """Get recent memories by timestamp."""
