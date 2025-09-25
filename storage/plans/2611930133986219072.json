@@ -1,0 +1,10 @@
+{
+  "plan": "API Error",
+  "steps": [],
+  "suggest_execution": false,
+  "response": "I encountered an error while processing your request: 404 models/text-bison-001 is not found for API version v1beta, or is not supported for generateContent. Call ListModels to see the list of available models and their supported methods.. Please try again.",
+  "safety_notes": [
+    "API call failed"
+  ],
+  "id": "2611930133986219072"
+}
