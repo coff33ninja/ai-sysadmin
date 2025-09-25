@@ -60,8 +60,8 @@ class ChatApp(App):
             event.input.value = ""
             return
 
-        req = {"jsonrpc": "2.0", "id": 1, "method": "terminal.run", "params": {"command": text}}
+        # Any other text is treated as a natural language query to create a plan
+        req = {"jsonrpc": "2.0", "id": 1, "method": "plan.create", "params": {"text": text, "backend": "gemini"}}
         response = self.router.call(json.dumps(req))
-        # append to log
-        log_widget.update(log_widget.renderable + f"\nYou: {text}\nResult: {response}")
+        log_widget.update(log_widget.renderable + f"\nYou: {text}\n{response}")
         event.input.value = ""

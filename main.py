@@ -2,7 +2,7 @@ import argparse
 import threading
 from core.router import Router
 from commands import terminal, files
-
+from memory.vector_store import recall, remember
 
 def build_router() -> Router:
     r = Router()
@@ -16,8 +16,16 @@ def build_router() -> Router:
     from ai_backend.planner import get_plan
 
     def create_plan(text: str, backend: str = "gemini"):
-        plan = get_plan(text, backend=backend)
+        # Recall relevant memories
+        context = recall(text)
+        
+        # Generate the plan
+        plan = get_plan(text, backend=backend, context=context)
         plan_id = save_plan(plan)
+        
+        # Remember the conversation turn
+        remember(text, metadata={"plan_id": plan_id})
+        
         return {"id": plan_id, "plan": plan}
 
     def list_all_plans():
@@ -26,7 +34,7 @@ def build_router() -> Router:
     def get_plan_by_id(plan_id: str):
         return load_plan(plan_id)
 
-    def execute_plan(plan_id: str, steps: list = None, confirm_steps: list = None):
+    def execute_plan(plan_id: str, steps: list = None, confirm_steps: list = None, dry_run: bool = False):
         # Support on-the-fly plan generation if plan_id is an empty string and a prompt was passed
         plan = load_plan(plan_id) if plan_id else {"plan": "", "steps": []}
         if not plan.get("steps") and plan_id == "":
@@ -49,7 +57,7 @@ def build_router() -> Router:
                     destructive_found.append(i)
 
         # If destructive steps exist, require confirm_steps to include them
-        if destructive_found:
+        if destructive_found and not dry_run:
             confirm_set = set(confirm_steps or [])
             missing = [i for i in destructive_found if i not in confirm_set]
             if missing:
@@ -59,6 +67,11 @@ def build_router() -> Router:
             step = plan["steps"][i]
             cmd = step["command"]
             args = step.get("args", {})
+            
+            if dry_run:
+                results.append(f"[Dry Run] Would execute: {cmd} with args {args}")
+                continue
+
             # Only support terminal.run and files.* for now
             if cmd == "terminal.run":
                 results.append(terminal.run(args.get("command", "")))
@@ -72,13 +85,17 @@ def build_router() -> Router:
                 results.append({"error": f"Unknown command {cmd}"})
         return {"plan_id": plan_id, "results": results}
 
-    async def execute_plan_async(plan_id: str = "", prompt: str = None, backend: str = "gemini", steps: list = None, confirm_steps: list = None):
+    async def execute_plan_async(plan_id: str = "", prompt: str = None, backend: str = "gemini", steps: list = None, confirm_steps: list = None, dry_run: bool = False):
         """Async plan executor. If plan_id is empty and prompt is provided, create the plan first."""
         if not plan_id and prompt:
             from core.plan_store import save_plan
             from ai_backend.planner import get_plan
-            plan = get_plan(prompt, backend=backend)
+            # Recall relevant memories
+            context = recall(prompt)
+            plan = get_plan(prompt, backend=backend, context=context)
             plan_id = save_plan(plan)
+            # Remember the conversation turn
+            remember(prompt, metadata={"plan_id": plan_id})
         else:
             plan = load_plan(plan_id)
 
@@ -97,7 +114,7 @@ def build_router() -> Router:
                 if is_destructive(step.get("args", {}).get("command", "")):
                     destructive_found.append(i)
 
-        if destructive_found:
+        if destructive_found and not dry_run:
             confirm_set = set(confirm_steps or [])
             missing = [i for i in destructive_found if i not in confirm_set]
             if missing:
@@ -107,6 +124,11 @@ def build_router() -> Router:
             step = plan["steps"][i]
             cmd = step["command"]
             args = step.get("args", {})
+
+            if dry_run:
+                results.append(f"[Dry Run] Would execute: {cmd} with args {args}")
+                continue
+
             if cmd == "terminal.run":
                 # use async runner
                 res = await terminal.run_async(args.get("command", ""))

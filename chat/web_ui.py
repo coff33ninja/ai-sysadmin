@@ -15,13 +15,15 @@ html = """
   <body>
     <head>
       <link rel="stylesheet" href="/static/chat.css">
+      <style>.error { color: red; }</style>
     </head>
     <h1>🤖 AI Sysadmin Web Chat</h1>
-    <div>
-      <h3>Create Plan</h3>
-      <input id="backend" type="text" value="gemini" />
-      <input id="prompt" type="text" size="80" />
-      <button onclick="createPlan()">Create Plan</button>
+    <div id="chat-container">
+      <div id="chat-history" style="height:300px;overflow:auto;border:1px solid #ccc;padding:8px;"></div>
+      <div id="chat-input">
+        <input id="prompt" type="text" size="80" placeholder="Ask the AI to do something..." onkeydown="if(event.keyCode==13) sendMessage()" />
+        <button onclick="sendMessage()">Send</button>
+      </div>
     </div>
     <div>
       <h3>Plans</h3>
@@ -32,6 +34,7 @@ html = """
       <div id="confirm-area" class="actions">
         <button class="btn" onclick="executeAll()">Execute All</button>
         <button class="btn" onclick="openConfirmModal()">Execute Selected Steps</button>
+        <button class="btn" onclick="dryRun()">Dry Run</button>
       </div>
       <div class="tui-preview">
         <div class="tui-header">TUI Preview</div>
@@ -53,38 +56,66 @@ html = """
     </div>
     <script>
       var ws = new WebSocket("ws://localhost:8000/ws");
+
+      function sendMessage(){
+        const promptInput = document.getElementById('prompt');
+        const prompt = promptInput.value;
+        promptInput.value = '';
+        ws.send(JSON.stringify({type:'chat_message', prompt: prompt}));
+
+        const history = document.getElementById('chat-history');
+        const userMsg = document.createElement('div');
+        userMsg.textContent = "You: " + prompt;
+        history.appendChild(userMsg);
+
+        const typingIndicator = document.createElement('div');
+        typingIndicator.id = 'typing-indicator';
+        typingIndicator.textContent = 'AI is typing...';
+        history.appendChild(typingIndicator);
+
+        history.scrollTop = history.scrollHeight;
+      }
+
       ws.onmessage = (e) => {
-        try {
-          const obj = JSON.parse(e.data)
-          // if plan.create response includes plan, show it
-          if (obj.result) {
-                // plan.create returns {id, plan}
-                if (obj.result.plan) {
-                  setSelected(obj.result.id, obj.result.plan)
-                } else if (Array.isArray(obj.result)) {
-                  renderPlans(obj.result)
-                } else if (obj.result.results) {
-                  // execution result
-                  document.getElementById('selected').textContent = JSON.stringify(obj.result, null, 2)
-                }
-              }
-          console.log(obj)
-        } catch(err) {
-          console.log('non-json message', e.data)
+        const history = document.getElementById('chat-history');
+        const typingIndicator = document.getElementById('typing-indicator');
+        if (typingIndicator) {
+          history.removeChild(typingIndicator);
         }
+
+        const aiMsg = document.createElement('div');
+        try {
+          const obj = JSON.parse(e.data);
+          if (obj.error) {
+            aiMsg.innerHTML = "<div class='error'>AI Error: " + obj.error + "</div>";
+          } else if (obj.result && obj.result.plan) {
+            aiMsg.innerHTML = "AI: <pre>" + JSON.stringify(obj.result.plan, null, 2) + "</pre>";
+            setSelected(obj.result.id, obj.result.plan);
+          } else if (Array.isArray(obj.result)) {
+            renderPlans(obj.result);
+            return; // Don't show raw plan list in chat
+          } else {
+            aiMsg.textContent = "AI: " + e.data;
+          }
+        } catch(err) {
+          aiMsg.textContent = "AI: " + e.data;
+        }
+        history.appendChild(aiMsg);
+        history.scrollTop = history.scrollHeight;
       };
 
       let selectedPlanId = null
       let selectedPlanObj = null
 
-      function createPlan(){
-        const backend = document.getElementById('backend').value;
-        const prompt = document.getElementById('prompt').value;
-        ws.send(JSON.stringify({type:'create_plan', backend: backend, prompt: prompt}));
-      }
-
       function listPlans(){
         ws.send(JSON.stringify({type:'list_plans'}));
+      }
+
+      function dryRun() {
+        if (!selectedPlanId) return alert('No plan selected');
+        const checks = Array.from(document.querySelectorAll('#selected input[type=checkbox]:checked'));
+        const idx = checks.map(c=>parseInt(c.value));
+        ws.send(JSON.stringify({type:'execute_confirm', plan_id: selectedPlanId, confirm_steps: idx, dry_run: true}));
       }
 
       function renderPlans(plans){
@@ -164,7 +195,7 @@ html = """
         const modal = document.getElementById('confirmModal')
         const details = document.getElementById('confirmDetails')
         details.innerHTML = ''
-        const p = document.createElement('div')
+        const p = document.createElement('p')
         p.textContent = `You are about to execute steps: ${selectedIdx.join(', ')}`
         details.appendChild(p)
         if (destructiveIdx && destructiveIdx.length) {
@@ -175,7 +206,7 @@ html = """
         }
         // store selected indices on modal for confirm handler
         modal.dataset.selected = JSON.stringify(selectedIdx)
-        modal.style.display = 'block'
+        .style.display = 'block'
       }
 
       function closeConfirmModal(){
@@ -220,11 +251,9 @@ async def websocket_endpoint(ws: WebSocket):
             continue
 
         t = data.get('type')
-        if t == 'create_plan':
-            backend = data.get('backend', 'gemini')
+        if t == 'chat_message':
             prompt = data.get('prompt', '')
-            req = {"jsonrpc": "2.0", "id": 1, "method": "plan.create", "params": {"text": prompt, "backend": backend}}
-            # Prefer async router call when available to avoid blocking
+            req = {"jsonrpc": "2.0", "id": 1, "method": "plan.create", "params": {"text": prompt, "backend": "gemini"}}
             if hasattr(router, 'call_async'):
                 res = await router.call_async(json.dumps(req))
             else:
@@ -239,24 +268,26 @@ async def websocket_endpoint(ws: WebSocket):
             await ws.send_text(res)
         elif t == 'execute_plan':
             pid = data.get('plan_id')
+            dry_run = data.get('dry_run', False)
             # prefer async executor
-            req = {"jsonrpc": "2.0", "id": 1, "method": "plan.execute_async", "params": {"plan_id": pid}}
+            req = {"jsonrpc": "2.0", "id": 1, "method": "plan.execute_async", "params": {"plan_id": pid, "dry_run": dry_run}}
             if hasattr(router, 'call_async'):
                 res = await router.call_async(json.dumps(req))
             else:
                 # fallback to sync plan.execute
-                req_sync = {"jsonrpc": "2.0", "id": 1, "method": "plan.execute", "params": {"plan_id": pid}}
+                req_sync = {"jsonrpc": "2.0", "id": 1, "method": "plan.execute", "params": {"plan_id": pid, "dry_run": dry_run}}
                 res = router.call(json.dumps(req_sync))
             await ws.send_text(res)
         elif t == 'execute_confirm':
             pid = data.get('plan_id')
             confirm = data.get('confirm_steps', [])
+            dry_run = data.get('dry_run', False)
             # prefer async executor
-            req = {"jsonrpc": "2.0", "id": 1, "method": "plan.execute_async", "params": {"plan_id": pid, "confirm_steps": confirm}}
+            req = {"jsonrpc": "2.0", "id": 1, "method": "plan.execute_async", "params": {"plan_id": pid, "confirm_steps": confirm, "dry_run": dry_run}}
             if hasattr(router, 'call_async'):
                 res = await router.call_async(json.dumps(req))
             else:
-                req_sync = {"jsonrpc": "2.0", "id": 1, "method": "plan.execute", "params": {"plan_id": pid, "confirm_steps": confirm}}
+                req_sync = {"jsonrpc": "2.0", "id": 1, "method": "plan.execute", "params": {"plan_id": pid, "confirm_steps": confirm, "dry_run": dry_run}}
                 res = router.call(json.dumps(req_sync))
             await ws.send_text(res)
         else:

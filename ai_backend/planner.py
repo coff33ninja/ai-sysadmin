@@ -4,21 +4,11 @@ from utils.validators import is_destructive
 from . import gemini_client, claude_client
 
 
-def normalize(raw: Dict) -> Dict:
-    # Ensure the plan has 'plan' and 'steps' keys and normalize step shape
-    plan = {"plan": raw.get("plan", "unnamed"), "steps": []}
-    for s in raw.get("steps", []):
-        cmd = s.get("command")
-        args = s.get("args", {})
-        plan["steps"].append({"command": cmd, "args": args})
-    return plan
-
-
-def get_plan(text: str, backend: str = "gemini") -> Dict:
+def get_plan(text: str, backend: str = "gemini", context: Dict = None) -> Dict:
     if backend == "claude":
-        raw = claude_client.query_claude(text)
+        raw = claude_client.query_claude(text, context=context)
     else:
-        raw = gemini_client.query_gemini(text)
+        raw = gemini_client.query_gemini(text, context=context)
     return normalize(raw)
 
 def normalize(ai_output: Dict[str, Any]) -> Dict[str, Any]:

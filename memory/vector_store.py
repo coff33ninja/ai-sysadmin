@@ -1,4 +1,4 @@
-"""Vector-based memory store for semantic recall."""
+"Vector-based memory store for semantic recall."
 
 import os
 import json
@@ -22,10 +22,7 @@ class VectorMemory:
 
         if CHROMA_AVAILABLE:
             self.client = chromadb.PersistentClient(path=persist_directory)
-            try:
-                self.collection = self.client.get_collection("ai_memory")
-            except chromadb.errors.CollectionNotFoundError:
-                self.collection = self.client.create_collection("ai_memory")
+            self.collection = self.client.get_or_create_collection("ai_memory")
         else:
             # Fallback to file-based storage
             self.collection = None
@@ -53,7 +50,10 @@ class VectorMemory:
         return memory_id
 
     def recall(
-        self, query: str, limit: int = 5, filter_metadata: Optional[Dict] = None
+        self,
+        query: str,
+        limit: int = 5,
+        filter_metadata: Optional[Dict] = None,
     ) -> List[Dict]:
         """Retrieve memories similar to the query."""
         if self.collection:
@@ -63,15 +63,16 @@ class VectorMemory:
             )
 
             memories = []
-            for i in range(len(results["ids"][0])):
-                memories.append(
-                    {
-                        "id": results["ids"][0][i],
-                        "text": results["documents"][0][i],
-                        "distance": results["distances"][0][i],
-                        "metadata": results["metadatas"][0][i],
-                    }
-                )
+            if results and results["ids"] and len(results["ids"]) > 0:
+                for i in range(len(results["ids"][0])):
+                    memories.append(
+                        {
+                            "id": results["ids"][0][i],
+                            "text": results["documents"][0][i],
+                            "distance": results["distances"][0][i],
+                            "metadata": results["metadatas"][0][i],
+                        }
+                    )
             return memories
         else:
             # Fallback to simple text matching
@@ -130,11 +131,9 @@ def remember(text: str, metadata: Optional[Dict] = None) -> str:
     """Store a memory."""
     return get_memory_store().remember(text, metadata)
 
-
 def recall(query: str, limit: int = 5) -> List[Dict]:
     """Recall memories similar to query."""
     return get_memory_store().recall(query, limit)
-
 
 def get_recent_memories(limit: int = 10) -> List[Dict]:
     """Get recent memories."""

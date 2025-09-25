@@ -10,3 +10,4 @@ CLAUDE_API_KEY = os.getenv('CLAUDE_API_KEY')
 GEMINI_API_URL = os.getenv('GEMINI_API_URL')
 # Default model to use with Google Generative Language API when only API key is present
 GEMINI_MODEL = os.getenv('GEMINI_MODEL', 'models/text-bison-001')
+CLAUDE_MODEL = os.getenv('CLAUDE_MODEL', 'claude-3-5-sonnet-20241022')
