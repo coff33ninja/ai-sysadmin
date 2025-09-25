@@ -1,0 +1,12 @@
+{
+  "plan": "demo",
+  "steps": [
+    {
+      "command": "files.list",
+      "args": {
+        "path": "."
+      }
+    }
+  ],
+  "id": "-5153955694834252246"
+}

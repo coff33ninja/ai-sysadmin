@@ -19,11 +19,13 @@ html = """
     <div>
       <h3>Plans</h3>
       <button onclick="listPlans()">Refresh</button>
-      <pre id="plans" style="height:200px;overflow:auto;border:1px solid #ccc"></pre>
+      <div id="plans" style="height:200px;overflow:auto;border:1px solid #ccc"></div>
       <h4>Selected Plan</h4>
-      <pre id="selected" style="height:200px;overflow:auto;border:1px solid #ccc"></pre>
-      <label>Confirm indices (comma sep): <input id="confirm_idx" type="text" /></label>
-      <button onclick="executeConfirm()">Execute with confirmation</button>
+      <div id="selected" style="height:200px;overflow:auto;border:1px solid #ccc;padding:8px"></div>
+      <div id="confirm-area" style="margin-top:8px">
+        <button onclick="executeAll()">Execute All</button>
+        <button onclick="executeSelected()">Execute Selected Steps</button>
+      </div>
     </div>
     <script>
       var ws = new WebSocket("ws://localhost:8000/ws");
@@ -31,18 +33,25 @@ html = """
         try {
           const obj = JSON.parse(e.data)
           // if plan.create response includes plan, show it
-          if (obj.result && obj.result.plan) {
-            document.getElementById('selected').textContent = JSON.stringify(obj.result.plan, null, 2)
-          }
-          // if plan.list response, render
-          if (obj.result && Array.isArray(obj.result)) {
-            document.getElementById('plans').textContent = JSON.stringify(obj.result, null, 2)
-          }
+          if (obj.result) {
+                // plan.create returns {id, plan}
+                if (obj.result.plan) {
+                  setSelected(obj.result.id, obj.result.plan)
+                } else if (Array.isArray(obj.result)) {
+                  renderPlans(obj.result)
+                } else if (obj.result.results) {
+                  // execution result
+                  document.getElementById('selected').textContent = JSON.stringify(obj.result, null, 2)
+                }
+              }
           console.log(obj)
         } catch(err) {
           console.log('non-json message', e.data)
         }
       };
+
+      let selectedPlanId = null
+      let selectedPlanObj = null
 
       function createPlan(){
         const backend = document.getElementById('backend').value;
@@ -54,14 +63,67 @@ html = """
         ws.send(JSON.stringify({type:'list_plans'}));
       }
 
+      function renderPlans(plans){
+        const el = document.getElementById('plans')
+        el.innerHTML = ''
+        plans.forEach(p=>{
+          const btn = document.createElement('button')
+          btn.textContent = `${p.id} - ${p.plan.plan || p.plan}`
+          btn.style.display = 'block'
+          btn.style.textAlign = 'left'
+          btn.onclick = ()=> setSelected(p.id, p.plan)
+          el.appendChild(btn)
+        })
+      }
+
+      function setSelected(id, plan){
+        selectedPlanId = id
+        selectedPlanObj = plan
+        renderSelectedPlan()
+      }
+
+      function renderSelectedPlan(){
+        const out = document.getElementById('selected')
+        out.innerHTML = ''
+        if (!selectedPlanObj) {
+          out.textContent = 'No plan selected'
+          return
+        }
+        const title = document.createElement('div')
+        title.textContent = selectedPlanObj.plan || 'Plan'
+        out.appendChild(title)
+        const list = document.createElement('div')
+        selectedPlanObj.steps.forEach((s,i)=>{
+          const row = document.createElement('div')
+          const cb = document.createElement('input')
+          cb.type = 'checkbox'
+          cb.value = i
+          cb.id = `step_${i}`
+          const lbl = document.createElement('label')
+          lbl.htmlFor = cb.id
+          lbl.textContent = `${i}: ${s.command} ${JSON.stringify(s.args||{})}`
+          row.appendChild(cb)
+          row.appendChild(lbl)
+          list.appendChild(row)
+        })
+        out.appendChild(list)
+      }
+
+      function executeAll(){
+        if (!selectedPlanId) return alert('No plan selected')
+        ws.send(JSON.stringify({type:'execute_plan', plan_id: selectedPlanId}))
+      }
+
+      function executeSelected(){
+        if (!selectedPlanId) return alert('No plan selected')
+        const checks = Array.from(document.querySelectorAll('#selected input[type=checkbox]:checked'))
+        const idx = checks.map(c=>parseInt(c.value))
+        ws.send(JSON.stringify({type:'execute_confirm', plan_id: selectedPlanId, confirm_steps: idx}))
+      }
+
+      // legacy: keep simple executePlan helper
       function executePlan(id){
         ws.send(JSON.stringify({type:'execute_plan', plan_id: id}));
-      }
-      function executeConfirm(){
-        const pid = document.getElementById('selected').textContent ? JSON.parse(document.getElementById('selected').textContent).id : null
-        const idx = document.getElementById('confirm_idx').value
-        const arr = idx.split(',').map(s=>parseInt(s.trim())).filter(n=>!isNaN(n))
-        ws.send(JSON.stringify({type:'execute_confirm', plan_id: pid, confirm_steps: arr}))
       }
     </script>
   </body>
