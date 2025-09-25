@@ -10,6 +10,14 @@ html = """
 <html>
   <body>
     <h1>🤖 AI Sysadmin Web Chat</h1>
+    <style>
+      body { font-family: system-ui, Arial, sans-serif; margin: 16px }
+      #plans button { background: #f8fafc; border: 1px solid #cbd5e1; padding: 6px; margin:4px 0; width:100%; text-align:left }
+      #selected { background: #0b1220; color: #e6eef6; border-radius:6px }
+      #selected .step { padding:6px; border-bottom:1px solid rgba(255,255,255,0.04) }
+      .destructive { background: #4c1f1f; color: #fff0f0 }
+      .actions { margin-top:8px }
+    </style>
     <div>
       <h3>Create Plan</h3>
       <input id="backend" type="text" value="gemini" />
@@ -104,6 +112,14 @@ html = """
           lbl.textContent = `${i}: ${s.command} ${JSON.stringify(s.args||{})}`
           row.appendChild(cb)
           row.appendChild(lbl)
+          row.className = 'step'
+          if (s.needs_confirmation) {
+            row.classList.add('destructive')
+            const warn = document.createElement('span')
+            warn.textContent = ' ⚠ destructive'
+            warn.style.marginLeft = '8px'
+            lbl.appendChild(warn)
+          }
           list.appendChild(row)
         })
         out.appendChild(list)
@@ -118,6 +134,12 @@ html = """
         if (!selectedPlanId) return alert('No plan selected')
         const checks = Array.from(document.querySelectorAll('#selected input[type=checkbox]:checked'))
         const idx = checks.map(c=>parseInt(c.value))
+        // if any selected steps are destructive, prompt for confirmation
+        const destructiveSelected = idx.some(i => selectedPlanObj.steps[i] && selectedPlanObj.steps[i].needs_confirmation)
+        if (destructiveSelected) {
+          const ok = confirm('Selected steps include destructive actions. Are you sure you want to run them?')
+          if (!ok) return
+        }
         ws.send(JSON.stringify({type:'execute_confirm', plan_id: selectedPlanId, confirm_steps: idx}))
       }
 
