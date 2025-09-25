@@ -1,0 +1,10 @@
+{
+  "plan": "API Error",
+  "steps": [],
+  "suggest_execution": false,
+  "response": "I encountered an error while processing your request: 'list' object has no attribute 'get_context_summary'. Please try again.",
+  "safety_notes": [
+    "API call failed"
+  ],
+  "id": "-7224143886128497204"
+}

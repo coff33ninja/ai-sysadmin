@@ -2,12 +2,14 @@ from fastapi import FastAPI, WebSocket
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 import json
+import os
 
 app = FastAPI()
 router = None  # injected by main
 
-# mount static files for CSS
-app.mount("/static", StaticFiles(directory="chat/static"), name="static")
+# mount static files for CSS - use absolute path to avoid issues with working directory
+static_dir = os.path.join(os.path.dirname(__file__), "static")
+app.mount("/static", StaticFiles(directory=static_dir), name="static")
 
 html = """
 <!DOCTYPE html>

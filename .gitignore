@@ -22,3 +22,4 @@ storage/backups/
 # Local TODO file (not for repository)
 TODO.md
 CHATGPT_CONVO.txt
+storage/memory/chroma.sqlite3

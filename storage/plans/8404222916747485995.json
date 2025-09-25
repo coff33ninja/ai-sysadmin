@@ -1,0 +1,10 @@
+{
+  "plan": "Library Missing",
+  "steps": [],
+  "suggest_execution": false,
+  "response": "Google GenerativeAI library not found. Please install it with: pip install google-generativeai",
+  "safety_notes": [
+    "Missing dependencies"
+  ],
+  "id": "8404222916747485995"
+}

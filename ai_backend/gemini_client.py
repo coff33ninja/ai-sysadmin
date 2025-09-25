@@ -360,15 +360,18 @@ def query_gemini(
         # Parse and validate the response
         parsed_response = parse_gemini_response(response.text)
 
-        # Add user message to context
-        context.add_message("user", prompt)
-        context.add_message("assistant", parsed_response["response"])
+        # Add user message to context (only if context is ConversationContext)
+        if hasattr(context, 'add_message'):
+            context.add_message("user", prompt)
+            context.add_message("assistant", parsed_response["response"])
 
         return parsed_response
 
     except Exception as e:
-        context.add_message("user", prompt)
-        context.add_message("assistant", f"Error: {str(e)}")
+        # Add error message to context (only if context is ConversationContext)
+        if hasattr(context, 'add_message'):
+            context.add_message("user", prompt)
+            context.add_message("assistant", f"Error: {str(e)}")
 
         return {
             "plan": "API Error",
