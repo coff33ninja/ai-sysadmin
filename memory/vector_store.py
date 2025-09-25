@@ -8,14 +8,15 @@ from datetime import datetime
 
 try:
     import chromadb
+
     CHROMA_AVAILABLE = True
-    
+
     # Check ChromaDB version for compatibility
     try:
         CHROMA_VERSION = chromadb.__version__
     except AttributeError:
         CHROMA_VERSION = "unknown"
-        
+
 except ImportError:
     CHROMA_AVAILABLE = False
     chromadb = None
@@ -28,7 +29,7 @@ class VectorMemory:
         self.client = None
         self.collection = None
         self.chroma_status = "not_available"
-        
+
         os.makedirs(persist_directory, exist_ok=True)
 
         if CHROMA_AVAILABLE:
@@ -40,27 +41,31 @@ class VectorMemory:
             except AttributeError:
                 # Fallback to older ChromaDB API (v0.3.x)
                 try:
-                    self.client = chromadb.Client(chromadb.config.Settings(
-                        chroma_db_impl="duckdb+parquet",
-                        persist_directory=persist_directory
-                    ))
+                    self.client = chromadb.Client(
+                        chromadb.config.Settings(
+                            chroma_db_impl="duckdb+parquet",
+                            persist_directory=persist_directory,
+                        )
+                    )
                     self.collection = self.client.get_or_create_collection("ai_memory")
                     self.chroma_status = f"legacy_persistent_v{CHROMA_VERSION}"
                 except Exception as e:
                     # If both fail, use in-memory client
                     try:
                         self.client = chromadb.Client()
-                        self.collection = self.client.get_or_create_collection("ai_memory")
+                        self.collection = self.client.get_or_create_collection(
+                            "ai_memory"
+                        )
                         self.chroma_status = f"memory_only_v{CHROMA_VERSION}"
                     except Exception as e2:
                         print(f"ChromaDB initialization failed: {e2}")
                         self.chroma_status = f"failed: {str(e2)}"
-        
+
         if not self.collection:
             # Fallback to file-based storage
             self.memory_file = os.path.join(persist_directory, "memories.jsonl")
             self.chroma_status = "file_fallback"
-    
+
     def get_status(self) -> Dict:
         """Get the current status of the vector memory system."""
         return {
@@ -68,7 +73,7 @@ class VectorMemory:
             "chroma_version": CHROMA_VERSION,
             "status": self.chroma_status,
             "using_vector_search": self.collection is not None,
-            "persist_directory": self.persist_dir
+            "persist_directory": self.persist_dir,
         }
 
     def remember(self, text: str, metadata: Optional[Dict] = None) -> str:
@@ -174,31 +179,30 @@ def remember(text: str, metadata: Optional[Dict] = None) -> str:
     """Store a memory."""
     return get_memory_store().remember(text, metadata)
 
+
 def recall(query: str, limit: int = 5) -> List[Dict]:
     """Recall memories similar to query."""
     return get_memory_store().recall(query, limit)
+
 
 def get_recent_memories(limit: int = 10) -> List[Dict]:
     """Get recent memories."""
     return get_memory_store().get_recent(limit)
 
+
 def diagnose_chromadb() -> Dict:
     """Diagnose ChromaDB installation and provide fix suggestions."""
-    diagnosis = {
-        "status": "unknown",
-        "issues": [],
-        "suggestions": []
-    }
-    
+    diagnosis = {"status": "unknown", "issues": [], "suggestions": []}
+
     if not CHROMA_AVAILABLE:
         diagnosis["status"] = "not_installed"
         diagnosis["issues"].append("ChromaDB is not installed")
         diagnosis["suggestions"].append("Install ChromaDB: pip install chromadb")
         return diagnosis
-    
+
     # Test different ChromaDB APIs
     apis_tested = []
-    
+
     # Test PersistentClient (v0.4+)
     try:
         test_client = chromadb.PersistentClient(path="test_temp")
@@ -208,19 +212,20 @@ def diagnose_chromadb() -> Dict:
         apis_tested.append("PersistentClient: ✗ (not available)")
     except Exception as e:
         apis_tested.append(f"PersistentClient: ✗ ({str(e)})")
-    
+
     # Test legacy Client (v0.3.x)
     try:
-        test_client = chromadb.Client(chromadb.config.Settings(
-            chroma_db_impl="duckdb+parquet",
-            persist_directory="test_temp"
-        ))
+        test_client = chromadb.Client(
+            chromadb.config.Settings(
+                chroma_db_impl="duckdb+parquet", persist_directory="test_temp"
+            )
+        )
         apis_tested.append("Legacy Client: ✓")
         if diagnosis["status"] == "unknown":
             diagnosis["status"] = "legacy_api_working"
     except Exception as e:
         apis_tested.append(f"Legacy Client: ✗ ({str(e)})")
-    
+
     # Test in-memory client
     try:
         test_client = chromadb.Client()
@@ -230,22 +235,28 @@ def diagnose_chromadb() -> Dict:
     except Exception as e:
         apis_tested.append(f"Memory Client: ✗ ({str(e)})")
         diagnosis["status"] = "all_apis_failed"
-    
+
     diagnosis["apis_tested"] = apis_tested
     diagnosis["version"] = CHROMA_VERSION
-    
+
     # Add suggestions based on status
     if diagnosis["status"] == "all_apis_failed":
-        diagnosis["suggestions"].extend([
-            "Reinstall ChromaDB: pip uninstall chromadb && pip install chromadb",
-            "Try a specific version: pip install chromadb==0.4.15",
-            "Check for dependency conflicts: pip check"
-        ])
+        diagnosis["suggestions"].extend(
+            [
+                "Reinstall ChromaDB: pip uninstall chromadb && pip install chromadb",
+                "Try a specific version: pip install chromadb==0.4.15",
+                "Check for dependency conflicts: pip check",
+            ]
+        )
     elif diagnosis["status"] == "memory_only":
-        diagnosis["suggestions"].append("Persistence not working - data will be lost on restart")
+        diagnosis["suggestions"].append(
+            "Persistence not working - data will be lost on restart"
+        )
     elif diagnosis["status"] == "legacy_api_working":
-        diagnosis["suggestions"].append("Consider upgrading ChromaDB for better performance")
-    
+        diagnosis["suggestions"].append(
+            "Consider upgrading ChromaDB for better performance"
+        )
+
     return diagnosis
 
 
@@ -253,25 +264,25 @@ def fix_chromadb_installation():
     """Provide interactive fix for ChromaDB issues."""
     print("🔍 Diagnosing ChromaDB installation...")
     diagnosis = diagnose_chromadb()
-    
+
     print(f"\n📊 Status: {diagnosis['status']}")
     print(f"📦 Version: {diagnosis.get('version', 'unknown')}")
-    
-    if diagnosis.get('apis_tested'):
+
+    if diagnosis.get("apis_tested"):
         print("\n🧪 API Tests:")
-        for test in diagnosis['apis_tested']:
+        for test in diagnosis["apis_tested"]:
             print(f"  {test}")
-    
-    if diagnosis.get('issues'):
+
+    if diagnosis.get("issues"):
         print("\n❌ Issues found:")
-        for issue in diagnosis['issues']:
+        for issue in diagnosis["issues"]:
             print(f"  • {issue}")
-    
-    if diagnosis.get('suggestions'):
+
+    if diagnosis.get("suggestions"):
         print("\n💡 Suggestions:")
-        for suggestion in diagnosis['suggestions']:
+        for suggestion in diagnosis["suggestions"]:
             print(f"  • {suggestion}")
-    
+
     return diagnosis
 
 
