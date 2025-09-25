@@ -1,23 +1,22 @@
 from fastapi import FastAPI, WebSocket
 from fastapi.responses import HTMLResponse
+from fastapi.staticfiles import StaticFiles
 import json
 
 app = FastAPI()
 router = None  # injected by main
 
+# mount static files for CSS
+app.mount("/static", StaticFiles(directory="chat/static"), name="static")
+
 html = """
 <!DOCTYPE html>
 <html>
   <body>
+    <head>
+      <link rel="stylesheet" href="/static/chat.css">
+    </head>
     <h1>🤖 AI Sysadmin Web Chat</h1>
-    <style>
-      body { font-family: system-ui, Arial, sans-serif; margin: 16px }
-      #plans button { background: #f8fafc; border: 1px solid #cbd5e1; padding: 6px; margin:4px 0; width:100%; text-align:left }
-      #selected { background: #0b1220; color: #e6eef6; border-radius:6px }
-      #selected .step { padding:6px; border-bottom:1px solid rgba(255,255,255,0.04) }
-      .destructive { background: #4c1f1f; color: #fff0f0 }
-      .actions { margin-top:8px }
-    </style>
     <div>
       <h3>Create Plan</h3>
       <input id="backend" type="text" value="gemini" />
@@ -30,9 +29,26 @@ html = """
       <div id="plans" style="height:200px;overflow:auto;border:1px solid #ccc"></div>
       <h4>Selected Plan</h4>
       <div id="selected" style="height:200px;overflow:auto;border:1px solid #ccc;padding:8px"></div>
-      <div id="confirm-area" style="margin-top:8px">
-        <button onclick="executeAll()">Execute All</button>
-        <button onclick="executeSelected()">Execute Selected Steps</button>
+      <div id="confirm-area" class="actions">
+        <button class="btn" onclick="executeAll()">Execute All</button>
+        <button class="btn" onclick="openConfirmModal()">Execute Selected Steps</button>
+      </div>
+      <div class="tui-preview">
+        <div class="tui-header">TUI Preview</div>
+        <div class="tui-body">Header / Log area / Input</div>
+        <div class="tui-footer">Footer</div>
+      </div>
+
+      <!-- Modal for confirmation -->
+      <div id="confirmModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="confirmTitle">
+        <div class="modal-content">
+          <h3 id="confirmTitle">Confirm selected steps</h3>
+          <div id="confirmDetails"></div>
+          <div class="modal-footer">
+            <button class="btn" onclick="closeConfirmModal()">Cancel</button>
+            <button class="btn" onclick="confirmAndExecute()">Confirm and Execute</button>
+          </div>
+        </div>
       </div>
     </div>
     <script>
