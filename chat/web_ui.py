@@ -151,12 +151,43 @@ html = """
         const checks = Array.from(document.querySelectorAll('#selected input[type=checkbox]:checked'))
         const idx = checks.map(c=>parseInt(c.value))
         // if any selected steps are destructive, prompt for confirmation
-        const destructiveSelected = idx.some(i => selectedPlanObj.steps[i] && selectedPlanObj.steps[i].needs_confirmation)
-        if (destructiveSelected) {
-          const ok = confirm('Selected steps include destructive actions. Are you sure you want to run them?')
-          if (!ok) return
+        const destructiveSelected = idx.filter(i => selectedPlanObj.steps[i] && selectedPlanObj.steps[i].needs_confirmation)
+        if (destructiveSelected.length > 0) {
+          // open a custom modal with details
+          openConfirmModal(idx, destructiveSelected)
+          return
         }
         ws.send(JSON.stringify({type:'execute_confirm', plan_id: selectedPlanId, confirm_steps: idx}))
+      }
+
+      function openConfirmModal(selectedIdx, destructiveIdx) {
+        const modal = document.getElementById('confirmModal')
+        const details = document.getElementById('confirmDetails')
+        details.innerHTML = ''
+        const p = document.createElement('div')
+        p.textContent = `You are about to execute steps: ${selectedIdx.join(', ')}`
+        details.appendChild(p)
+        if (destructiveIdx && destructiveIdx.length) {
+          const warn = document.createElement('div')
+          warn.textContent = `Destructive steps: ${destructiveIdx.join(', ')}`
+          warn.style.color = '#ffb4b4'
+          details.appendChild(warn)
+        }
+        // store selected indices on modal for confirm handler
+        modal.dataset.selected = JSON.stringify(selectedIdx)
+        modal.style.display = 'block'
+      }
+
+      function closeConfirmModal(){
+        const modal = document.getElementById('confirmModal')
+        modal.style.display = 'none'
+      }
+
+      function confirmAndExecute(){
+        const modal = document.getElementById('confirmModal')
+        const selectedIdx = JSON.parse(modal.dataset.selected || '[]')
+        ws.send(JSON.stringify({type:'execute_confirm', plan_id: selectedPlanId, confirm_steps: selectedIdx}))
+        closeConfirmModal()
       }
 
       // legacy: keep simple executePlan helper

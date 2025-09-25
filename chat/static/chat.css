@@ -1,21 +1,25 @@
 /* Styles for AI Sysadmin Web UI */
-body { font-family: system-ui, Arial, sans-serif; margin: 16px; background: #0f1720; color: #e6eef6 }
-h1 { margin-bottom: 12px }
-#plans button { background: #0f1720; border: 1px solid #334155; padding: 6px; margin:4px 0; width:100%; text-align:left; color: #e6eef6 }
+body { font-family: Inter, system-ui, Arial, sans-serif; margin: 12px; background: #0b1220; color: #e6eef6 }
+h1 { margin-bottom: 8px; font-size: 1.25rem }
+#plans button { background: transparent; border: 1px solid #24303b; padding: 6px; margin:4px 0; width:100%; text-align:left; color: #e6eef6 }
 #plans { max-width: 720px }
-#selected { background: #071025; color: #e6eef6; border-radius:6px; padding:8px; min-height:80px }
-.step { padding:6px; border-bottom:1px solid rgba(255,255,255,0.03); display:flex; gap:8px; align-items:center }
+#selected { background: #06101a; color: #e6eef6; border-radius:6px; padding:8px; min-height:100px }
+.step { padding:6px; border-bottom:1px solid rgba(255,255,255,0.03); display:flex; gap:12px; align-items:center }
 .destructive { background: linear-gradient(90deg,#4c1f1f22,#4c1f1f11); color: #ffecec }
-.actions { margin-top:8px }
-.btn { background:#0b1220; color:#e6eef6; padding:8px 10px; border:1px solid #334155; border-radius:4px; cursor:pointer }
+.actions { margin-top:12px }
+.btn { background:#071025; color:#e6eef6; padding:8px 10px; border:1px solid #17303b; border-radius:6px; cursor:pointer }
 .btn:active { transform: translateY(1px) }
+
+/* Focus styles for accessibility */
+button:focus, .btn:focus, input:focus { outline: 2px solid #60a5fa; outline-offset: 2px }
+
 
 /* Modal */
 .modal { display:none; position:fixed; z-index:9999; left:0; top:0; width:100%; height:100%; overflow:auto; background-color: rgba(0,0,0,0.6); }
-.modal-content { background:#071025; margin:10% auto; padding:20px; border:1px solid #334155; width:80%; max-width:600px; border-radius:8px }
+.modal-content { background:#06101a; margin:8% auto; padding:18px; border:1px solid #17303b; width:90%; max-width:560px; border-radius:8px }
 .modal-footer { display:flex; justify-content:flex-end; gap:8px; margin-top:12px }
 
 /* TUI preview */
-.tui-preview { background:#071025; border:1px solid #334155; padding:8px; border-radius:6px; margin-top:12px }
-.tui-header, .tui-footer { background:#0b1220; padding:6px; color:#e6eef6; border-radius:4px }
-.tui-body { min-height:80px; padding:6px; color:#cbd5e1 }
+.tui-preview { background:#06101a; border:1px solid #17303b; padding:8px; border-radius:6px; margin-top:12px }
+.tui-header, .tui-footer { background:#071025; padding:6px; color:#e6eef6; border-radius:4px }
+.tui-body { min-height:80px; padding:6px; color:#cbd5e1; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, 'Roboto Mono', monospace }
