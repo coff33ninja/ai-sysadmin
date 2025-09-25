@@ -63,8 +63,10 @@ class VectorMemory:
 
         if not self.collection:
             # Fallback to file-based storage
-            self.memory_file = os.path.join(persist_directory, "memories.jsonl")
             self.chroma_status = "file_fallback"
+        
+        # Always set up file fallback path
+        self.memory_file = os.path.join(persist_directory, "memories.jsonl")
 
     def get_status(self) -> Dict:
         """Get the current status of the vector memory system."""
@@ -186,6 +188,30 @@ class VectorMemory:
 
     def get_recent(self, limit: int = 10) -> List[Dict]:
         """Get recent memories by timestamp."""
+        if self.collection:
+            # For ChromaDB, we need to get all and sort by timestamp
+            try:
+                # Get all memories from ChromaDB
+                all_results = self.collection.get()
+                memories = []
+                if all_results and all_results["ids"]:
+                    for i in range(len(all_results["ids"])):
+                        memories.append({
+                            "id": all_results["ids"][i],
+                            "text": all_results["documents"][i],
+                            "metadata": all_results["metadatas"][i]
+                        })
+                # Sort by timestamp descending
+                memories.sort(key=lambda x: x["metadata"].get("timestamp", ""), reverse=True)
+                return memories[:limit]
+            except Exception:
+                # Fallback to file-based if ChromaDB fails
+                return self._get_recent_from_file(limit)
+        else:
+            return self._get_recent_from_file(limit)
+    
+    def _get_recent_from_file(self, limit: int) -> List[Dict]:
+        """Get recent memories from file storage."""
         memories = self._load_all_memories()
         # Sort by timestamp descending
         memories.sort(key=lambda x: x["metadata"].get("timestamp", ""), reverse=True)
