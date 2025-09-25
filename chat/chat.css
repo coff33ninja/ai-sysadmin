@@ -1,0 +1,22 @@
+/* Minimal stylesheet for the TUI chat app */
+
+/* Root layout */
+App {
+  background: $surface  ;
+}
+
+#log {
+  padding: 1 1;
+  color: $text;
+}
+
+Input {
+  dock: bottom;
+}
+
+Header, Footer {
+  background: $primary-dark;
+  color: $background;
+}
+
+/* Keep it intentionally minimal to avoid Textual parse issues */
