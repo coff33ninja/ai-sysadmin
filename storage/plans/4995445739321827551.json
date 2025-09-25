@@ -1,0 +1,13 @@
+{
+  "plan": "Echo test",
+  "steps": [
+    {
+      "id": 0,
+      "command": "terminal.run",
+      "args": {
+        "command": "e:\\SCRIPTS\\sysmin\\ai_sysadmin\\.venv\\Scripts\\python.exe -c \"print(\"hello\")\""
+      }
+    }
+  ],
+  "id": "4995445739321827551"
+}
