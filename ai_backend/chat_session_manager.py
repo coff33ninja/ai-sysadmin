@@ -21,10 +21,18 @@ class ChatSession:
         self.awaiting_confirmation = False
         self.pending_execution_intent: Optional[Dict] = None
         
+        # Enhanced planner tracking
+        self.plan_history: List[Dict] = []  # Track all plans created in session
+        self.execution_history: List[Dict] = []  # Track all executions
+        self.safety_warnings_acknowledged: List[str] = []  # Track acknowledged warnings
+        
         # User preferences (could be expanded)
         self.preferred_backend = "gemini"
         self.auto_execute = False  # If true, execute plans without confirmation
         self.dry_run_first = False  # If true, always do dry runs first
+        self.show_time_estimates = True  # Show execution time estimates
+        self.show_prerequisites = True  # Show prerequisite checks
+        self.show_safety_analysis = True  # Show safety analysis
     
     def add_message(self, role: str, content: str, metadata: Dict = None):
         """Add a message to the conversation history"""
@@ -42,12 +50,26 @@ class ChatSession:
         if len(self.messages) > 50:
             self.messages = self.messages[-50:]
     
-    def set_last_plan(self, plan_id: str, plan_summary: str, suggest_execution: bool = False):
+    def set_last_plan(self, plan_id: str, plan_summary: str, suggest_execution: bool = False, plan_data: Dict = None):
         """Set the last created plan for easy reference"""
         self.last_plan_id = plan_id
         self.last_plan_summary = plan_summary
         self.awaiting_confirmation = suggest_execution
         self.last_activity = datetime.now()
+        
+        # Track plan in history
+        plan_record = {
+            "id": plan_id,
+            "summary": plan_summary,
+            "created_at": datetime.now().isoformat(),
+            "suggest_execution": suggest_execution,
+            "data": plan_data or {}
+        }
+        self.plan_history.append(plan_record)
+        
+        # Keep only last 20 plans
+        if len(self.plan_history) > 20:
+            self.plan_history = self.plan_history[-20:]
     
     def set_execution_intent(self, intent: Dict):
         """Set pending execution intent from user input"""
@@ -97,9 +119,15 @@ class ChatSession:
             "last_plan_summary": self.last_plan_summary,
             "awaiting_confirmation": self.awaiting_confirmation,
             "pending_execution_intent": self.pending_execution_intent,
+            "plan_history": self.plan_history,
+            "execution_history": self.execution_history,
+            "safety_warnings_acknowledged": self.safety_warnings_acknowledged,
             "preferred_backend": self.preferred_backend,
             "auto_execute": self.auto_execute,
-            "dry_run_first": self.dry_run_first
+            "dry_run_first": self.dry_run_first,
+            "show_time_estimates": self.show_time_estimates,
+            "show_prerequisites": self.show_prerequisites,
+            "show_safety_analysis": self.show_safety_analysis
         }
     
     @classmethod
@@ -113,9 +141,15 @@ class ChatSession:
         session.last_plan_summary = data.get("last_plan_summary")
         session.awaiting_confirmation = data.get("awaiting_confirmation", False)
         session.pending_execution_intent = data.get("pending_execution_intent")
+        session.plan_history = data.get("plan_history", [])
+        session.execution_history = data.get("execution_history", [])
+        session.safety_warnings_acknowledged = data.get("safety_warnings_acknowledged", [])
         session.preferred_backend = data.get("preferred_backend", "gemini")
         session.auto_execute = data.get("auto_execute", False)
         session.dry_run_first = data.get("dry_run_first", False)
+        session.show_time_estimates = data.get("show_time_estimates", True)
+        session.show_prerequisites = data.get("show_prerequisites", True)
+        session.show_safety_analysis = data.get("show_safety_analysis", True)
         return session
 
 
@@ -195,15 +229,15 @@ class ConversationHandler:
         self.session_manager = session_manager
     
     def process_user_message(self, message: str, session_id: str = None, backend: str = "gemini") -> Dict[str, Any]:
-        """Process user message and return appropriate response"""
+        """Process user message and return appropriate response with enhanced planner integration"""
         session = self.session_manager.get_or_create_session(session_id)
         
         # Add user message to session
         session.add_message("user", message)
         
         # Import here to avoid circular imports
-        from ai_backend.gemini_client import detect_execution_intent, query_gemini
-        from ai_backend.planner import get_plan
+        from ai_backend.gemini_client import detect_execution_intent
+        from ai_backend.planner import create_plan_with_context, get_plan_summary
         
         # Detect user intent
         intent = detect_execution_intent(message, session)
@@ -257,63 +291,75 @@ class ConversationHandler:
                 })
         
         else:
-            # Create or modify plan
+            # Create or modify plan using enhanced planner
             try:
-                # Use the enhanced gemini client with session context
-                from ai_backend.gemini_client import ConversationContext
+                # Use the enhanced planner with full session context
+                enhanced_plan = create_plan_with_context(
+                    message, 
+                    session_context=session, 
+                    backend=backend
+                )
                 
-                # Convert session to context
-                context = ConversationContext()
-                context.history = [{"role": msg["role"], "content": msg["content"]} 
-                                 for msg in session.get_recent_context()]
-                context.last_plan_id = session.last_plan_id
-                context.awaiting_confirmation = session.awaiting_confirmation
-                context.last_plan_summary = session.last_plan_summary
-                
-                # Get plan from AI
-                ai_response = query_gemini(message, context)
-                
-                # Handle execution intent returned by AI
-                if ai_response.get("_execution_intent"):
-                    session.set_execution_intent(ai_response["_execution_intent"])
+                # Handle execution intent returned by planner
+                if enhanced_plan.get("execution_intent"):
+                    session.set_execution_intent(enhanced_plan["execution_intent"])
                     response_data["execute_plan"] = True
                     response_data["plan_id"] = session.last_plan_id
                 
                 # Create the plan if steps were provided
-                if ai_response["steps"]:
-                    # This would normally call the plan creation endpoint
-                    # For now, we'll simulate it
-                    plan_data = {
-                        "plan": ai_response["plan"],
-                        "steps": ai_response["steps"],
-                        "suggest_execution": ai_response.get("suggest_execution", False),
-                        "safety_notes": ai_response.get("safety_notes", [])
-                    }
-                    
-                    # In a real implementation, save the plan and get an ID
+                if enhanced_plan["steps"]:
+                    # Generate plan ID and summary
                     plan_id = f"plan_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
-                    session.set_last_plan(plan_id, ai_response["plan"], 
-                                         ai_response.get("suggest_execution", False))
+                    plan_summary = get_plan_summary(enhanced_plan)
                     
+                    # Set plan in session
+                    session.set_last_plan(
+                        plan_id, 
+                        plan_summary, 
+                        enhanced_plan.get("suggest_execution", False)
+                    )
+                    
+                    # Prepare enhanced response data
                     response_data.update({
-                        "response": ai_response["response"],
+                        "response": enhanced_plan["response"],
                         "plan_created": True,
                         "plan_id": plan_id,
-                        "plan_data": plan_data,
-                        "suggest_execution": ai_response.get("suggest_execution", False)
+                        "plan_data": {
+                            "plan": enhanced_plan["plan"],
+                            "steps": enhanced_plan["steps"],
+                            "suggest_execution": enhanced_plan.get("suggest_execution", False),
+                            "safety_notes": enhanced_plan.get("safety_notes", []),
+                            "estimated_duration": enhanced_plan.get("estimated_duration"),
+                            "prerequisites": enhanced_plan.get("prerequisites", []),
+                            "contextual_suggestions": enhanced_plan.get("contextual_suggestions", []),
+                            "rollback_suggestions": enhanced_plan.get("rollback_suggestions", [])
+                        },
+                        "suggest_execution": enhanced_plan.get("suggest_execution", False),
+                        "enhanced_features": {
+                            "has_safety_analysis": bool(enhanced_plan.get("safety_notes")),
+                            "has_time_estimate": bool(enhanced_plan.get("estimated_duration")),
+                            "has_prerequisites": bool(enhanced_plan.get("prerequisites")),
+                            "has_contextual_suggestions": bool(enhanced_plan.get("contextual_suggestions")),
+                            "has_rollback_plan": bool(enhanced_plan.get("rollback_suggestions"))
+                        }
                     })
                 else:
                     response_data.update({
-                        "response": ai_response["response"],
+                        "response": enhanced_plan["response"],
                         "plan_created": False
                     })
                 
-                # Add AI response to session
-                session.add_message("assistant", ai_response["response"])
+                # Add AI response to session with metadata
+                session.add_message("assistant", enhanced_plan["response"], {
+                    "plan_created": bool(enhanced_plan["steps"]),
+                    "plan_id": plan_id if enhanced_plan["steps"] else None,
+                    "safety_concerns": len(enhanced_plan.get("safety_notes", [])),
+                    "step_count": len(enhanced_plan["steps"])
+                })
                 
             except Exception as e:
                 error_response = f"I encountered an error: {str(e)}. Could you try rephrasing your request?"
-                session.add_message("assistant", error_response)
+                session.add_message("assistant", error_response, {"error": True})
                 response_data.update({
                     "response": error_response,
                     "error": True

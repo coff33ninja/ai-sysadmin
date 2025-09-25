@@ -6,7 +6,7 @@ from typing import Dict, Optional
 from config import CLAUDE_API_KEY, CLAUDE_MODEL
 
 
-def query_claude(prompt: str, context: Optional[Dict] = None) -> Dict:
+def query_claude(prompt: str, context: Optional[Dict] = None, session_context=None) -> Dict:
     """Query Claude API and return structured response."""
     if not CLAUDE_API_KEY:
         return {
@@ -32,7 +32,10 @@ def query_claude(prompt: str, context: Optional[Dict] = None) -> Dict:
     "steps": [
         {"command": "module.function", "args": {"param": "value"}},
         {"command": "terminal.run", "args": {"command": "shell command here"}}
-    ]
+    ],
+    "suggest_execution": true,
+    "response": "I've created a plan to [describe what it does]. Would you like me to execute it?",
+    "safety_notes": ["Warning about destructive operations if any"]
 }
 
 Available commands:
@@ -41,10 +44,26 @@ Available commands:
 - files.read: Read file contents
 - files.write: Write to file
 
+Set suggest_execution to true if the task seems ready to execute immediately.
+Include safety warnings for any potentially destructive operations.
 Only respond with valid JSON, no additional text."""
 
+        # Add conversation context if available
+        if session_context:
+            recent_messages = getattr(session_context, 'messages', [])[-5:]
+            if recent_messages:
+                system_prompt += "\n\nRecent conversation context:\n"
+                for msg in recent_messages:
+                    role = msg.get('role', 'unknown')
+                    content = msg.get('content', '')[:100]
+                    system_prompt += f"{role}: {content}...\n"
+            
+            if getattr(session_context, 'awaiting_confirmation', False):
+                system_prompt += f"\nLast plan: {getattr(session_context, 'last_plan_summary', 'Unknown')}"
+                system_prompt += "\nUser may be confirming execution or requesting modifications."
+        
         if context:
-            system_prompt += "\n\nHere is some relevant context from previous conversations:\n"
+            system_prompt += "\n\nAdditional context:\n"
             system_prompt += json.dumps(context)
 
 
